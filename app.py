@@ -247,59 +247,43 @@ async def process_challan_submission(session_id: str, vehicle_number: str, captc
         except:
             pass
 
-        # Take screenshot after initial wait
-        driver.save_screenshot("4.png")
-
-        # Wait for either the results or error messages
-        WebDriverWait(driver, 30).until(
-            EC.any_of(
-                EC.presence_of_element_located((By.ID, "rtable")),  # Success case - table exists
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Please Enter Correct Captcha')]")),
-                EC.presence_of_element_located((By.XPATH, "//font[contains(text(), 'No Pending') and contains(text(), 'Challans')]")),
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'No Pending') and contains(text(), 'Challans')]"))
-            )
-        )
-
-        # Take another screenshot after waiting
-        driver.save_screenshot("4_after_wait.png")
-
         results = {"status": "unknown", "message": "", "data": None}
 
+        # First check for captcha error
         try:
-            # Check for specific error messages first
-            error_element_captcha = driver.find_elements(By.XPATH, "//*[contains(text(), 'Please Enter Correct Captcha')]")
-            if error_element_captcha:
-                results["status"] = "error"
-                results["message"] = "Invalid captcha entered. Please try again."
-                return results
+            error_element_captcha = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Please Enter Correct Captcha')]"))
+            )
+            results["status"] = "error"
+            results["message"] = "Invalid captcha entered. Please try again."
+            return results
+        except:
+            pass  # No captcha error, continue
 
-            # Check for no pending challans
-            no_challan_elements = driver.find_elements(By.XPATH, """
-                //*[
-                    contains(text(), 'No Pending') and 
-                    contains(text(), 'Challans') and 
-                    (self::font or self::div or self::span)
-                ]
-            """)
-            
-            if no_challan_elements:
-                results["status"] = "success"
-                results["message"] = "No pending challans found for this vehicle."
-                results["data"] = {
-                    "vehicle_info": {"vehicle_number": vehicle_number},
-                    "challans": []
-                }
-                return results
+        # Then check for no pending challans
+        try:
+            no_challan_text = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'No Pending') and contains(text(), 'Challans')]"))
+            )
+            results["status"] = "success"
+            results["message"] = "No pending challans found for this vehicle."
+            results["data"] = {
+                "vehicle_info": {"vehicle_number": vehicle_number},
+                "challans": []
+            }
+            return results
+        except:
+            pass  # No "No Pending Challans" message, continue to check for challan table
 
-            # Look for the main table with ID 'rtable'
-            table = WebDriverWait(driver, 10).until(
+        # Finally check for challan table
+        try:
+            table = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.ID, "rtable"))
             )
             
             # Extract vehicle info from the first row
             vehicle_info = {}
             try:
-                # The first row contains vehicle info
                 vehicle_rows = table.find_elements(By.XPATH, ".//tr[position()=1]")
                 if vehicle_rows:
                     vehicle_row = vehicle_rows[0]
@@ -311,16 +295,15 @@ async def process_challan_submission(session_id: str, vehicle_number: str, captc
                 print(f"Warning: Could not extract vehicle/owner info: {e}")
                 vehicle_info = {"vehicle_number": vehicle_number}
 
-            # Find all challan rows (skip headers and total row)
+            # Find all challan rows
             rows = table.find_elements(By.XPATH, ".//tr[.//input[@type='checkbox' and @id='manualErr']]")
             challans = []
             
             for row in rows:
                 try:
                     cells = row.find_elements(By.TAG_NAME, "td")
-                    if len(cells) >= 16:  # We expect 16 cells based on the HTML
-                        # Extract nested violation and fine amount from the nested table
-                        violation_cell = cells[8]  # The cell containing the nested violation table
+                    if len(cells) >= 16:
+                        violation_cell = cells[8]
                         violation_table = violation_cell.find_element(By.TAG_NAME, "table")
                         violation_text = violation_table.find_element(By.XPATH, ".//td[1]").text.strip()
                         
@@ -363,16 +346,13 @@ async def process_challan_submission(session_id: str, vehicle_number: str, captc
                 "challans": challans,
                 "grand_total": grand_total
             }
-
-            driver.save_screenshot("5_success.png")
-            print(results)
             return results
 
-        except Exception as find_error:
-            print(f"Error finding result elements: {find_error}")
-            driver.save_screenshot("5_error.png")
+        except Exception as table_error:
+            print(f"Error finding or processing challan table: {table_error}")
+            # If we get here, we couldn't find any of the expected elements
             results["status"] = "error"
-            results["message"] = "Could not determine challan status or failed to parse results page."
+            results["message"] = "Could not determine challan status. Please try again."
             return results
 
     except Exception as e:
@@ -403,15 +383,12 @@ async def start_session():
         driver = create_driver()
         active_sessions[session_id] = {"driver": driver}
         print(f"Session created: {session_id}")
-        # Immediately try to get the first captcha
-        captcha_b64 = await get_captcha(session_id)
         return JSONResponse(content={
             "session_id": session_id,
-            "status": "session_started",
-            "captcha_image": captcha_b64
+            "status": "session_started"
         })
     except Exception as e:
-        print(f"Error creating session or getting initial captcha: {e}")
+        print(f"Error creating session: {e}")
         # Clean up if driver was partially created but failed before storing
         if session_id in active_sessions and 'driver' in active_sessions[session_id]:
              active_sessions[session_id]['driver'].quit()
@@ -445,14 +422,18 @@ async def process_vehicle(session_id: str, request: Request):
 
     active_sessions[session_id]['vehicle_number_input'] = vehicle_number # Store the number used
 
-    # In this model, processing vehicle just stores the number.
-    # Captcha is assumed to be already fetched or will be fetched separately.
-    # You might combine this with /submit-challan if preferred.
-    return JSONResponse(content={
-        "session_id": session_id,
-        "status": "vehicle_processed",
-        "vehicle_number": vehicle_number
-    })
+    # After successful vehicle number processing, get the captcha
+    try:
+        captcha_b64 = await get_captcha(session_id)
+        return JSONResponse(content={
+            "session_id": session_id,
+            "status": "vehicle_processed",
+            "vehicle_number": vehicle_number,
+            "captcha_image": captcha_b64
+        })
+    except Exception as e:
+        print(f"Error getting captcha after vehicle processing: {e}")
+        raise HTTPException(status_code=500, detail=f"Vehicle number processed but failed to get captcha: {e}")
 
 
 @app.post("/submit-challan/{session_id}")

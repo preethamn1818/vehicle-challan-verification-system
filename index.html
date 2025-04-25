@@ -67,9 +67,13 @@
             border-radius: 4px;
         }
         .image-preview {
-            max-width: 100%;
+            max-width: 300px;
+            max-height: 200px;
+            width: auto;
             height: auto;
             margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         .captcha-container {
             display: flex;
@@ -216,7 +220,7 @@
     </style>
 </head>
 <body>
-    <h1>Vehicle Challan Verification System (HTTP)</h1>
+    <h1>Vehicle Challan Verification System</h1>
 
     <div id="statusArea" class="status-container info">Enter details to start.</div>
 
@@ -232,11 +236,11 @@
             <input type="text" id="vehicleNumberInput" placeholder="e.g., TS09AB1234">
             <p>OR Upload Image:</p>
             <input type="file" id="imageInput" accept="image/*">
-            <button id="processVehicleBtn" disabled>Process Vehicle Input</button>
             <div>
                 <h3>Image Preview:</h3>
                 <img id="imagePreview" class="image-preview hidden">
             </div>
+            <button id="processVehicleBtn" disabled>Process Vehicle Input</button>
             <p><strong>Processed Vehicle Number:</strong> <span id="processedVehicleNumber">N/A</span></p>
         </div>
         <div class="captcha-container">
@@ -252,11 +256,6 @@
         <h2>Step 3: Challan Results</h2>
         <div id="resultContent"></div>
         <button id="closeSessionBtn">Close Session</button>
-    </div>
-
-    <div class="container">
-        <h2>Log</h2>
-        <div id="logContainer" class="log-container"></div>
     </div>
 
     <script>
@@ -284,29 +283,14 @@
         const resultContent = document.getElementById('resultContent');
         const closeSessionBtn = document.getElementById('closeSessionBtn');
         const statusArea = document.getElementById('statusArea');
-        const logContainer = document.getElementById('logContainer');
-
-        // --- Helper Functions ---
-        function logMessage(message, type = 'info') {
-            console.log(`[${type}] ${message}`);
-            const logEntry = document.createElement('div');
-            logEntry.classList.add('log-entry');
-            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
-        }
 
         function updateStatus(message, type = 'info') {
             statusArea.textContent = message;
             statusArea.className = `status-container ${type}`;
-            logMessage(`Status updated: ${message}`, type);
+            console.log(`[${type}] ${message}`);
         }
 
-        function setLoading(button, spinner, isLoading) {
-            // Clear any existing loading states first
-            const allSpinners = document.querySelectorAll('.spinner');
-            allSpinners.forEach(spinner => spinner.classList.add('hidden'));
-            
+        function setLoading(button, isLoading) {
             // Enable all buttons by default
             startSessionBtn.disabled = false;
             processVehicleBtn.disabled = false;
@@ -322,7 +306,6 @@
             // Now apply specific loading state if needed
             if (isLoading) {
                 if (button) button.disabled = true;
-                if (spinner) spinner.classList.remove('hidden');
                 
                 // Disable appropriate elements based on current state
                 if (!sessionId) {
@@ -357,13 +340,12 @@
             captchaInput.value = '';
             processedVehicleNumberSpan.textContent = 'N/A';
             resultContent.innerHTML = '';
-            logContainer.innerHTML = '';
             
             // Reset image preview
             imagePreview.src = '';
             imagePreview.classList.add('hidden');
             
-            setLoading(null, null, false);
+            setLoading(null, false);
         }
 
         async function makeApiCall(endpoint, method = 'POST', body = null, requiresSession = true) {
@@ -387,11 +369,9 @@
                 }
             }
 
-            logMessage(`Sending ${method} request to ${url}`);
             try {
                 const response = await fetch(url, options);
                 const data = await response.json();
-                logMessage(`Received response from ${url}: Status ${response.status}`);
 
                 if (!response.ok) {
                     const errorMsg = data.detail || `API Error: ${response.statusText}`;
@@ -404,9 +384,8 @@
                 updateStatus(`Network or API error: ${error.message}`, 'error');
                 return null;
             } finally {
-                // Ensure loading state is cleared if this was the last pending operation
                 if (!isProcessing) {
-                    setLoading(null, null, false);
+                    setLoading(null, false);
                 }
             }
         }
@@ -422,18 +401,16 @@
             captchaInput.value = '';
             processedVehicleNumberSpan.textContent = 'N/A';
             
-            setLoading(startSessionBtn, null, true);
+            setLoading(startSessionBtn, true);
             updateStatus('Starting new session...', 'info');
             const data = await makeApiCall('/start-session', 'POST', null, false);
-            setLoading(startSessionBtn, null, false);
+            setLoading(startSessionBtn, false);
 
             if (data && data.session_id) {
                 sessionId = data.session_id;
                 updateStatus('Session started. Enter vehicle details.', 'success');
                 vehicleInputContainer.classList.remove('hidden');
-                captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
                 processVehicleBtn.disabled = false;
-                refreshCaptchaBtn.disabled = false;
                 closeSessionBtn.disabled = false;
             } else {
                 updateStatus('Failed to start session.', 'error');
@@ -488,7 +465,7 @@
                 return;
             }
 
-            setLoading(processVehicleBtn, null, true);
+            setLoading(processVehicleBtn, true);
             updateStatus('Processing vehicle input...', 'info');
 
             const formData = new FormData();
@@ -500,7 +477,7 @@
 
             const endpoint = `/process-vehicle/${sessionId}`;
             const data = await makeApiCall(endpoint, 'POST', formData);
-            setLoading(processVehicleBtn, null, false);
+            setLoading(processVehicleBtn, false);
 
             if (data && data.vehicle_number) {
                 currentVehicleNumber = data.vehicle_number;
@@ -508,22 +485,25 @@
                 processedVehicleNumberSpan.textContent = currentVehicleNumber;
                 captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
                 submitChallanBtn.disabled = false;
+                refreshCaptchaBtn.disabled = false;
             } else {
                 updateStatus('Failed to process vehicle input or extract number.', 'error');
                 currentVehicleNumber = null;
                 processedVehicleNumberSpan.textContent = 'Error';
                 submitChallanBtn.disabled = true;
+                refreshCaptchaBtn.disabled = true;
+                captchaImage.src = '';
             }
         });
 
         refreshCaptchaBtn.addEventListener('click', async () => {
-            setLoading(refreshCaptchaBtn, null, true);
+            setLoading(refreshCaptchaBtn, true);
             updateStatus('Refreshing captcha...', 'info');
             captchaImage.src = ''; // Clear current captcha
             captchaInput.value = ''; // Clear old input
             const endpoint = `/refresh-captcha/${sessionId}`;
             const data = await makeApiCall(endpoint, 'POST');
-            setLoading(refreshCaptchaBtn, null, false);
+            setLoading(refreshCaptchaBtn, false);
 
             if (data && data.captcha_image) {
                 captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
@@ -544,7 +524,7 @@
                  return;
             }
 
-            setLoading(submitChallanBtn, null, true);
+            setLoading(submitChallanBtn, true);
             updateStatus('Submitting challan request...', 'info');
 
             const formData = new FormData();
@@ -553,7 +533,7 @@
 
             const endpoint = `/submit-challan/${sessionId}`;
             const data = await makeApiCall(endpoint, 'POST', formData);
-            setLoading(submitChallanBtn, null, false);
+            setLoading(submitChallanBtn, false);
 
             resultContainer.classList.remove('hidden');
             if (data) {
@@ -644,7 +624,7 @@
                     updateStatus(`Error: ${data.message}`, 'error');
                     resultContent.innerHTML = `<p class="error">Error: ${data.message}</p>`;
                     if (data.message.toLowerCase().includes('captcha')) {
-                         logMessage('Captcha error detected. Consider refreshing captcha.');
+                         console.log('Captcha error detected. Consider refreshing captcha.');
                     }
                 } else {
                      updateStatus(`Result: ${data.message}`, 'info');
@@ -658,11 +638,11 @@
 
         closeSessionBtn.addEventListener('click', async () => {
             if (!sessionId) return;
-            setLoading(closeSessionBtn, null, true);
+            setLoading(closeSessionBtn, true);
             updateStatus('Closing session...', 'info');
             const endpoint = `/end-session/${sessionId}`;
             const data = await makeApiCall(endpoint, 'POST', null, true);
-            setLoading(closeSessionBtn, null, false);
+            setLoading(closeSessionBtn, false);
 
             if (data && data.status === 'session_closed') {
                 updateStatus('Session closed successfully.', 'success');
