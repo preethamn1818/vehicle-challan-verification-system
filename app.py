@@ -1,6 +1,7 @@
 import base64
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 from mangum import Mangum  # Use Mangum for AWS Lambda
 from PIL import Image
 from io import BytesIO
@@ -84,6 +85,15 @@ def create_driver():
 
 # Create FastAPI app
 app = FastAPI(title="Vehicle Challan API - Lambda")
+
+# --- Template Engine Setup ---
+templates = Jinja2Templates(directory="templates")
+
+# --- Add Root Endpoint to serve index.html ---
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """Serves the index.html page."""
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # Add CORS middleware
 app.add_middleware(
@@ -490,7 +500,7 @@ async def end_session(session_id: str):
 
 
 # Mangum handler for AWS Lambda
-# handler = Mangum(app)
+handler = Mangum(app, lifespan="off") # lifespan='off' might be needed for some background tasks/cleanup
 
 
 # --- Optional: Local Development Startup ---
@@ -503,9 +513,11 @@ if __name__ == "__main__":
     # Add a cleanup hook for local development if needed
     import atexit
     def cleanup_all_sessions():
-        print("Cleaning up all active sessions on local exit...")
-        for session_id in list(active_sessions.keys()):
+        print("Cleaning up all active Selenium sessions...")
+        session_ids = list(active_sessions.keys())
+        for session_id in session_ids:
             close_session_sync(session_id)
+        print("Cleanup complete.")
     atexit.register(cleanup_all_sessions)
 
 # Remove WebSocket related code:
@@ -524,3 +536,6 @@ if __name__ == "__main__":
 # - Added basic local run block with `if __name__ == "__main__":`.
 # - Updated Google GenAI initialization.
 # - Added synchronous session close helper.
+
+# Note: The handler object is what AWS Lambda will invoke.
+# The uvicorn command is only for local testing.

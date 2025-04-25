@@ -1,19 +1,26 @@
-# This workflow will install Python dependencies and run tests with a single version of Python
+# This workflow will install Python dependencies, run tests, and deploy to AWS Lambda
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python application
+name: Python Application CI/CD
 
 on:
   push:
-    branches: [ "main" ] # Or your primary branch
-  pull_request:
-    branches: [ "main" ] # Or your primary branch
+    branches: [ "main" ] # Deploy ONLY on push to main
+  # Remove pull_request trigger for deployment
+  # pull_request:
+  #   branches: [ "main" ]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }} # e.g., us-east-1
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }} # Your ECR repository name
+  LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }} # Your Lambda function name
 
 permissions:
   contents: read
+  id-token: write # Required for OIDC if using that for AWS auth
 
 jobs:
-  build:
+  build_and_deploy: # Renamed job for clarity
 
     runs-on: ubuntu-latest
 
@@ -27,16 +34,67 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    # Add steps for linting, testing, or building here
-    # Example Linting (using flake8):
+
+    # --- Deployment Steps (Only run on push to main) ---
+    - name: Configure AWS credentials
+      # This step only runs on push events to the main branch, not on pull requests.
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        # role-to-assume: arn:aws:iam::ACCOUNT-ID-WITHOUT-HYPHENS:role/MyGitHubActionRole # Optional: Use OIDC role
+        # role-session-name: GitHubActions-${{ github.run_id }} # Optional: Session name for OIDC
+
+    - name: Login to Amazon ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        echo "Building image..."
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        echo "Pushing image to ECR..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Update Lambda function code
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: update-lambda
+      env:
+        IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+      run: |
+        echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME with image: $IMAGE_URI"
+        aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $IMAGE_URI --publish
+        # Wait for the update to complete (optional, but recommended)
+        echo "Waiting for Lambda function update to complete..."
+        aws lambda wait function-updated --function-name $LAMBDA_FUNCTION_NAME
+        echo "Lambda function update complete."
+
+    - name: Logout of Amazon ECR
+      # Always run logout if login was attempted, even if subsequent steps failed
+      if: always() && steps.login-ecr.outcome == 'success'
+      run: docker logout ${{ steps.login-ecr.outputs.registry }}
+
+    # Add steps for linting, testing, etc. here if needed
+    # They will run before the deployment steps
+
+    # Example Linting:
     # - name: Lint with flake8
     #   run: |
     #     pip install flake8
-    #     # stop the build if there are Python syntax errors or undefined names
     #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
     #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    # Example Testing (using pytest):
+
+    # Example Testing:
     # - name: Test with pytest
     #   run: |
     #     pip install pytest
