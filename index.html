@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Challan API Client (HTTP)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status-container {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        input[type=file], input[type=text] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .image-preview {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+        }
+        .captcha-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 15px 0;
+        }
+        .captcha-image {
+            max-width: 200px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+        .result-container {
+            margin-top: 20px;
+        }
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .result-table th, .result-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .result-table th {
+            background-color: #f2f2f2;
+        }
+        .hidden {
+            display: none;
+        }
+        #connectionStatus {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+        .challan-results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .vehicle-info {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+
+        .vehicle-info h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
+
+        .vehicle-info p {
+            margin: 8px 0;
+            color: #34495e;
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .result-table th,
+        .result-table td {
+            padding: 12px 8px;
+            text-align: left;
+            border: 1px solid #dee2e6;
+        }
+
+        .result-table th {
+            background-color: #f1f3f5;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .result-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .result-table tr:hover {
+            background-color: #e9ecef;
+        }
+
+        .grand-total {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+        }
+
+        .grand-total h4 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .grand-total p {
+            margin: 8px 0;
+            color: #34495e;
+            font-size: 1.1em;
+        }
+
+        .grand-total p:last-child {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        @media (max-width: 768px) {
+            .result-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            
+            .vehicle-info,
+            .grand-total {
+                margin: 10px 0;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Vehicle Challan Verification System (HTTP)</h1>
+
+    <div id="statusArea" class="status-container info">Enter details to start.</div>
+
+    <div class="container">
+        <h2>Step 1: Start Session & Get Captcha</h2>
+        <button id="startSessionBtn">Start Session</button>
+    </div>
+
+    <div id="vehicleInputContainer" class="container hidden">
+        <h2>Step 2: Enter Vehicle Details & Captcha</h2>
+        <div>
+            <label for="vehicleNumberInput">Vehicle Registration Number:</label>
+            <input type="text" id="vehicleNumberInput" placeholder="e.g., TS09AB1234">
+            <p>OR Upload Image:</p>
+            <input type="file" id="imageInput" accept="image/*">
+            <button id="processVehicleBtn" disabled>Process Vehicle Input</button>
+            <div>
+                <h3>Image Preview:</h3>
+                <img id="imagePreview" class="image-preview hidden">
+            </div>
+            <p><strong>Processed Vehicle Number:</strong> <span id="processedVehicleNumber">N/A</span></p>
+        </div>
+        <div class="captcha-container">
+            <h3>Captcha:</h3>
+            <img id="captchaImage" class="captcha-image" alt="Captcha Image">
+            <input type="text" id="captchaInput" placeholder="Enter captcha text">
+            <button id="submitChallanBtn" disabled>Submit Challan Request</button>
+            <button id="refreshCaptchaBtn" disabled>Refresh Captcha</button>
+        </div>
+    </div>
+
+    <div id="resultContainer" class="container hidden">
+        <h2>Step 3: Challan Results</h2>
+        <div id="resultContent"></div>
+        <button id="closeSessionBtn">Close Session</button>
+    </div>
+
+    <div class="container">
+        <h2>Log</h2>
+        <div id="logContainer" class="log-container"></div>
+    </div>
+
+    <script>
+        // Global variables
+        let sessionId = null;
+        let currentVehicleNumber = null; // Store the number extracted/entered
+        let isProcessing = false;
+        // --- IMPORTANT: Update this URL for Lambda --- //
+        const apiBaseUrl = 'http://127.0.0.1:8000'; // Local dev
+        // const apiBaseUrl = 'YOUR_API_GATEWAY_ENDPOINT'; // Replace with your deployed API Gateway URL
+
+        // DOM elements
+        const startSessionBtn = document.getElementById('startSessionBtn');
+        const vehicleInputContainer = document.getElementById('vehicleInputContainer');
+        const imageInput = document.getElementById('imageInput');
+        const vehicleNumberInput = document.getElementById('vehicleNumberInput');
+        const processVehicleBtn = document.getElementById('processVehicleBtn');
+        const imagePreview = document.getElementById('imagePreview');
+        const processedVehicleNumberSpan = document.getElementById('processedVehicleNumber');
+        const captchaImage = document.getElementById('captchaImage');
+        const captchaInput = document.getElementById('captchaInput');
+        const submitChallanBtn = document.getElementById('submitChallanBtn');
+        const refreshCaptchaBtn = document.getElementById('refreshCaptchaBtn');
+        const resultContainer = document.getElementById('resultContainer');
+        const resultContent = document.getElementById('resultContent');
+        const closeSessionBtn = document.getElementById('closeSessionBtn');
+        const statusArea = document.getElementById('statusArea');
+        const logContainer = document.getElementById('logContainer');
+
+        // --- Helper Functions ---
+        function logMessage(message, type = 'info') {
+            console.log(`[${type}] ${message}`);
+            const logEntry = document.createElement('div');
+            logEntry.classList.add('log-entry');
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
+        }
+
+        function updateStatus(message, type = 'info') {
+            statusArea.textContent = message;
+            statusArea.className = `status-container ${type}`;
+            logMessage(`Status updated: ${message}`, type);
+        }
+
+        function setLoading(button, spinner, isLoading) {
+            // Clear any existing loading states first
+            const allSpinners = document.querySelectorAll('.spinner');
+            allSpinners.forEach(spinner => spinner.classList.add('hidden'));
+            
+            // Enable all buttons by default
+            startSessionBtn.disabled = false;
+            processVehicleBtn.disabled = false;
+            submitChallanBtn.disabled = false;
+            refreshCaptchaBtn.disabled = false;
+            closeSessionBtn.disabled = false;
+            
+            // Enable all inputs by default
+            imageInput.disabled = false;
+            vehicleNumberInput.disabled = false;
+            captchaInput.disabled = false;
+
+            // Now apply specific loading state if needed
+            if (isLoading) {
+                if (button) button.disabled = true;
+                if (spinner) spinner.classList.remove('hidden');
+                
+                // Disable appropriate elements based on current state
+                if (!sessionId) {
+                    processVehicleBtn.disabled = true;
+                    submitChallanBtn.disabled = true;
+                    refreshCaptchaBtn.disabled = true;
+                    closeSessionBtn.disabled = true;
+                    imageInput.disabled = true;
+                    vehicleNumberInput.disabled = true;
+                    captchaInput.disabled = true;
+                } else {
+                    submitChallanBtn.disabled = !currentVehicleNumber || !captchaInput.value;
+                }
+            }
+            
+            // Update global processing state
+            isProcessing = isLoading;
+        }
+
+        function resetUI() {
+            sessionId = null;
+            currentVehicleNumber = null;
+            isProcessing = false;
+            
+            // Reset all UI elements
+            updateStatus('Enter details to start.', 'info');
+            startSessionBtn.disabled = false;
+            vehicleInputContainer.classList.add('hidden');
+            captchaImage.src = ''; // Clear captcha image
+            imageInput.value = '';
+            vehicleNumberInput.value = '';
+            captchaInput.value = '';
+            processedVehicleNumberSpan.textContent = 'N/A';
+            resultContent.innerHTML = '';
+            logContainer.innerHTML = '';
+            
+            // Reset image preview
+            imagePreview.src = '';
+            imagePreview.classList.add('hidden');
+            
+            setLoading(null, null, false);
+        }
+
+        async function makeApiCall(endpoint, method = 'POST', body = null, requiresSession = true) {
+            if (requiresSession && !sessionId) {
+                updateStatus('Error: No active session.', 'error');
+                return null;
+            }
+
+            const url = `${apiBaseUrl}${endpoint}`;
+            const options = {
+                method: method,
+                headers: {},
+            };
+
+            if (body) {
+                if (body instanceof FormData) {
+                    options.body = body;
+                } else {
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = JSON.stringify(body);
+                }
+            }
+
+            logMessage(`Sending ${method} request to ${url}`);
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                logMessage(`Received response from ${url}: Status ${response.status}`);
+
+                if (!response.ok) {
+                    const errorMsg = data.detail || `API Error: ${response.statusText}`;
+                    updateStatus(`Error: ${errorMsg}`, 'error');
+                    return null;
+                }
+                return data;
+            } catch (error) {
+                console.error("API Call Error:", error);
+                updateStatus(`Network or API error: ${error.message}`, 'error');
+                return null;
+            } finally {
+                // Ensure loading state is cleared if this was the last pending operation
+                if (!isProcessing) {
+                    setLoading(null, null, false);
+                }
+            }
+        }
+
+        // --- Event Listeners ---
+        startSessionBtn.addEventListener('click', async () => {
+            // Reset previous data first
+            imagePreview.src = '';
+            imagePreview.classList.add('hidden');
+            captchaImage.src = '';
+            imageInput.value = '';
+            vehicleNumberInput.value = '';
+            captchaInput.value = '';
+            processedVehicleNumberSpan.textContent = 'N/A';
+            
+            setLoading(startSessionBtn, null, true);
+            updateStatus('Starting new session...', 'info');
+            const data = await makeApiCall('/start-session', 'POST', null, false);
+            setLoading(startSessionBtn, null, false);
+
+            if (data && data.session_id) {
+                sessionId = data.session_id;
+                updateStatus('Session started. Enter vehicle details.', 'success');
+                vehicleInputContainer.classList.remove('hidden');
+                captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
+                processVehicleBtn.disabled = false;
+                refreshCaptchaBtn.disabled = false;
+                closeSessionBtn.disabled = false;
+            } else {
+                updateStatus('Failed to start session.', 'error');
+                resetUI();
+            }
+        });
+
+        imageInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    updateStatus('Please select a valid image file.', 'error');
+                    imageInput.value = ''; // Clear invalid file
+                    imagePreview.src = ''; // Clear preview image
+                    imagePreview.classList.add('hidden');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.classList.remove('hidden');
+                    vehicleNumberInput.value = ''; // Clear text input if image is selected
+                };
+                reader.onerror = () => {
+                    updateStatus('Error reading the image file.', 'error');
+                    imagePreview.src = ''; // Clear preview image
+                    imagePreview.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.src = ''; // Clear preview image
+                imagePreview.classList.add('hidden');
+            }
+        });
+
+        vehicleNumberInput.addEventListener('input', () => {
+            if (vehicleNumberInput.value) {
+                imageInput.value = ''; // Clear file input if text is entered
+                imagePreview.src = ''; // Clear preview image
+                imagePreview.classList.add('hidden');
+            }
+        });
+
+        processVehicleBtn.addEventListener('click', async () => {
+            const imageFile = imageInput.files[0];
+            const vehicleNumText = vehicleNumberInput.value.trim();
+
+            if (!imageFile && !vehicleNumText) {
+                updateStatus('Please provide a vehicle image or enter the registration number.', 'error');
+                return;
+            }
+
+            setLoading(processVehicleBtn, null, true);
+            updateStatus('Processing vehicle input...', 'info');
+
+            const formData = new FormData();
+            if (imageFile) {
+                formData.append('image', imageFile);
+            } else {
+                formData.append('vehicle_number', vehicleNumText);
+            }
+
+            const endpoint = `/process-vehicle/${sessionId}`;
+            const data = await makeApiCall(endpoint, 'POST', formData);
+            setLoading(processVehicleBtn, null, false);
+
+            if (data && data.vehicle_number) {
+                currentVehicleNumber = data.vehicle_number;
+                updateStatus(`Vehicle number identified: ${currentVehicleNumber}. Please solve the captcha.`, 'success');
+                processedVehicleNumberSpan.textContent = currentVehicleNumber;
+                captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
+                submitChallanBtn.disabled = false;
+            } else {
+                updateStatus('Failed to process vehicle input or extract number.', 'error');
+                currentVehicleNumber = null;
+                processedVehicleNumberSpan.textContent = 'Error';
+                submitChallanBtn.disabled = true;
+            }
+        });
+
+        refreshCaptchaBtn.addEventListener('click', async () => {
+            setLoading(refreshCaptchaBtn, null, true);
+            updateStatus('Refreshing captcha...', 'info');
+            captchaImage.src = ''; // Clear current captcha
+            captchaInput.value = ''; // Clear old input
+            const endpoint = `/refresh-captcha/${sessionId}`;
+            const data = await makeApiCall(endpoint, 'POST');
+            setLoading(refreshCaptchaBtn, null, false);
+
+            if (data && data.captcha_image) {
+                captchaImage.src = `data:image/png;base64,${data.captcha_image}`;
+                updateStatus('Captcha refreshed. Please solve the new one.', 'info');
+            } else {
+                updateStatus('Failed to refresh captcha.', 'error');
+            }
+        });
+
+        submitChallanBtn.addEventListener('click', async () => {
+            const captchaSolution = captchaInput.value.trim();
+            if (!captchaSolution) {
+                updateStatus('Please enter the captcha solution.', 'error');
+                return;
+            }
+            if (!currentVehicleNumber) {
+                 updateStatus('Error: Vehicle number not processed yet.', 'error');
+                 return;
+            }
+
+            setLoading(submitChallanBtn, null, true);
+            updateStatus('Submitting challan request...', 'info');
+
+            const formData = new FormData();
+            formData.append('captcha', captchaSolution);
+            // Vehicle number is known server-side via session
+
+            const endpoint = `/submit-challan/${sessionId}`;
+            const data = await makeApiCall(endpoint, 'POST', formData);
+            setLoading(submitChallanBtn, null, false);
+
+            resultContainer.classList.remove('hidden');
+            if (data) {
+                if (data.status === 'success') {
+                    updateStatus(`Result: ${data.message}`, 'success');
+                    if (data.data) {
+                        let resultHtml = '<div class="challan-results">';
+                        
+                        // Add vehicle info section
+                        if (data.data.vehicle_info) {
+                            resultHtml += `
+                                <div class="vehicle-info">
+                                    <h3>Vehicle Information</h3>
+                                    <p><strong>Vehicle Number:</strong> ${data.data.vehicle_info.vehicle_number || 'N/A'}</p>
+                                    <p><strong>Owner Name:</strong> ${data.data.vehicle_info.owner_name || 'N/A'}</p>
+                                </div>
+                            `;
+                        }
+
+                        // Add challans table if there are any challans
+                        if (data.data.challans && data.data.challans.length > 0) {
+                            resultHtml += `
+                                <h3>Pending Challans</h3>
+                                <table class="result-table">
+                                    <thead>
+                                        <tr>
+                                            <th>S.No</th>
+                                            <th>Unit Name</th>
+                                            <th>Challan No</th>
+                                            <th>Date</th>
+                                            <th>Time</th>
+                                            <th>Place</th>
+                                            <th>PS Limits</th>
+                                            <th>Violation</th>
+                                            <th>Fine Amount</th>
+                                            <th>User Charges</th>
+                                            <th>Total Fine</th>
+                                            <th>Image</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                            `;
+
+                            data.data.challans.forEach(challan => {
+                                resultHtml += `
+                                    <tr>
+                                        <td>${challan.sno}</td>
+                                        <td>${challan.unit_name}</td>
+                                        <td>${challan.echallan_no}</td>
+                                        <td>${challan.date}</td>
+                                        <td>${challan.time}</td>
+                                        <td>${challan.place}</td>
+                                        <td>${challan.ps_limits}</td>
+                                        <td>${challan.violation}</td>
+                                        <td>${challan.fine_amount}</td>
+                                        <td>${challan.user_charges}</td>
+                                        <td>${challan.total_fine}</td>
+                                        <td>${challan.has_image ? 'Available' : 'N/A'}</td>
+                                    </tr>
+                                `;
+                            });
+
+                            resultHtml += '</tbody></table>';
+                        } else if (data.data.grand_total && data.data.grand_total.total_fine !== '0') {
+                            resultHtml += '<p>Details of individual challans are not available, but there are pending fines.</p>';
+                        } else {
+                            resultHtml += '<p>No pending challans found for this vehicle.</p>';
+                        }
+
+                        // Add grand total if available and has non-zero total
+                        if (data.data.grand_total && data.data.grand_total.total_fine !== '0') {
+                            resultHtml += `
+                                <div class="grand-total">
+                                    <h4>Grand Total</h4>
+                                    <p><strong>Total Fine Amount:</strong> ₹${data.data.grand_total.fine_amount}</p>
+                                    <p><strong>User Charges:</strong> ₹${data.data.grand_total.user_charges}</p>
+                                    <p><strong>Total Payable:</strong> ₹${data.data.grand_total.total_fine}</p>
+                                </div>
+                            `;
+                        }
+
+                        resultHtml += '</div>';
+                        resultContent.innerHTML = resultHtml;
+                    } else {
+                        resultContent.innerHTML = `<p>${data.message}</p>`;
+                    }
+                } else if (data.status === 'error') {
+                    updateStatus(`Error: ${data.message}`, 'error');
+                    resultContent.innerHTML = `<p class="error">Error: ${data.message}</p>`;
+                    if (data.message.toLowerCase().includes('captcha')) {
+                         logMessage('Captcha error detected. Consider refreshing captcha.');
+                    }
+                } else {
+                     updateStatus(`Result: ${data.message}`, 'info');
+                     resultContent.innerHTML = `<p>${data.message || 'Received unknown status.'}</p>`;
+                }
+            } else {
+                updateStatus('Failed to get challan results.', 'error');
+                resultContent.innerHTML = '<p class="error">Failed to retrieve results from the server.</p>';
+            }
+        });
+
+        closeSessionBtn.addEventListener('click', async () => {
+            if (!sessionId) return;
+            setLoading(closeSessionBtn, null, true);
+            updateStatus('Closing session...', 'info');
+            const endpoint = `/end-session/${sessionId}`;
+            const data = await makeApiCall(endpoint, 'POST', null, true);
+            setLoading(closeSessionBtn, null, false);
+
+            if (data && data.status === 'session_closed') {
+                updateStatus('Session closed successfully.', 'success');
+            } else {
+                updateStatus('Failed to close session cleanly on the server, but resetting UI.', 'warning');
+            }
+            resetUI();
+        });
+
+        // Initial setup
+        resetUI();
+
+    </script>
+</body>
+</html>
